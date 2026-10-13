@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gestão da Manutenção Corretiva</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="loading" class="loading" hidden>
+  <div class="spinner"></div>
+  <p>Processando planilha…</p>
+</div>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-icon"><i data-icon="wrench"></i></span>
+    <div>
+      <h1>Gestão da Manutenção Corretiva</h1>
+      <p class="sub" id="subInfo">Nenhuma planilha carregada</p>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn btn-primary" id="btnImport" type="button"><i data-icon="upload"></i>Importar planilha</button>
+    <button class="btn" id="btnClear" type="button" disabled><i data-icon="rotate"></i>Limpar filtros</button>
+    <button class="btn" id="btnCsv" type="button" disabled><i data-icon="download"></i>Exportar CSV</button>
+    <button class="btn" id="btnPdf" type="button" disabled><i data-icon="file"></i>Gerar PDF</button>
+  </div>
+</header>
+
+<main class="container">
+
+  <!-- 2. Upload e informações da base -->
+  <section class="card upload" id="uploadSection">
+    <label class="dropzone" id="dropzone" for="fileInput">
+      <i data-icon="upload"></i>
+      <strong>Arraste a planilha aqui ou clique para selecionar</strong>
+      <span>Arquivo <code>BaseManutenção.xlsx</code> (.xlsx ou .xls) com as abas <code>BaseOrdens</code> e <code>Equipamentos</code></span>
+    </label>
+    <input type="file" id="fileInput" accept=".xlsx,.xls" hidden>
+    <div class="base-info" id="baseInfo" hidden></div>
+  </section>
+
+  <div id="statusMsg" class="msg" hidden role="status"></div>
+
+  <div id="emptyState" class="card empty-state">
+    <i data-icon="gauge"></i>
+    <h2>Importe a planilha para começar</h2>
+    <p>Nenhum dado é exibido até que uma planilha real seja carregada. Todo o processamento é feito localmente, no seu navegador.</p>
+  </div>
+
+  <div id="dashboard" hidden>
+
+    <!-- 3. Filtros -->
+    <section class="card filters" aria-label="Filtros globais">
+      <div class="filter"><label for="fAno">Ano</label><select id="fAno"></select></div>
+      <div class="filter"><label for="fMes">Mês</label><select id="fMes"></select></div>
+      <div class="filter"><label for="fSetor">Setor</label><select id="fSetor"></select></div>
+      <div class="filter"><label for="fTipo">Tipo de falha</label><select id="fTipo"></select></div>
+      <div class="filter filter-wide"><label for="fEquip">Equipamento</label><select id="fEquip"></select></div>
+    </section>
+
+    <div id="noData" class="msg msg-warn" hidden>Nenhuma ordem encontrada para os filtros selecionados. Ajuste ou limpe os filtros.</div>
+
+    <!-- 4. KPIs -->
+    <section class="kpis" id="kpis" aria-label="Indicadores"></section>
+
+    <!-- 5. Gráficos -->
+    <section class="grid-charts" aria-label="Gráficos de análise">
+      <article class="card chart-card span-2">
+        <header><h3>Quantidade de falhas por mês</h3><p class="hint">Meses sem falhas aparecem com valor zero</p></header>
+        <div class="chart-box"><canvas id="ch1"></canvas></div>
+      </article>
+      <article class="card chart-card">
+        <header><h3>Tipos de falha</h3><p class="hint">Ocorrências e percentual</p></header>
+        <div class="chart-box"><canvas id="ch2"></canvas></div>
+      </article>
+      <article class="card chart-card">
+        <header><h3>Falhas por setor</h3><p class="hint">Via relacionamento por ID Equip</p></header>
+        <div class="chart-box"><canvas id="ch3"></canvas></div>
+      </article>
+      <article class="card chart-card">
+        <header><h3>MTBF mensal (h)</h3><p class="hint">Lacuna = sem intervalos entre falhas (N/D)</p></header>
+        <div class="chart-box"><canvas id="ch4"></canvas></div>
+      </article>
+      <article class="card chart-card">
+        <header><h3>MTTR mensal (h)</h3><p class="hint">Apenas reparos concluídos e válidos</p></header>
+        <div class="chart-box"><canvas id="ch5"></canvas></div>
+      </article>
+      <article class="card chart-card">
+        <header><h3>Disponibilidade mensal estimada (%)</h3><p class="hint">MTBF ÷ (MTBF + MTTR) — estimativa</p></header>
+        <div class="chart-box"><canvas id="ch6"></canvas></div>
+      </article>
+      <article class="card chart-card">
+        <header><h3>Homem-hora por setor (HH)</h3><p class="hint">Horas de reparo × colaboradores</p></header>
+        <div class="chart-box"><canvas id="ch7"></canvas></div>
+      </article>
+      <article class="card chart-card span-2">
+        <header><h3>Evolução acumulada das falhas</h3><p class="hint">Soma acumulada mês a mês no período selecionado</p></header>
+        <div class="chart-box"><canvas id="ch8"></canvas></div>
+      </article>
+    </section>
+
+    <!-- 6. Ranking -->
+    <section class="card" id="rankingSection">
+      <header class="section-head"><h3><i data-icon="trophy"></i>Top 10 equipamentos com mais falhas</h3>
+        <p class="hint">Desempate pelo MTTR médio (maior primeiro)</p></header>
+      <div class="table-wrap">
+        <table class="tbl" id="rankingTable">
+          <thead><tr><th>#</th><th>ID</th><th>Equipamento</th><th>Setor</th><th class="num">Falhas</th><th class="num">MTTR médio (h)</th><th class="num">HH acumulado</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 7. Tabela detalhada -->
+    <section class="card" id="ordersSection">
+      <header class="section-head">
+        <h3><i data-icon="list"></i>Ordens de manutenção</h3>
+        <div class="search"><i data-icon="search"></i><input type="search" id="tblSearch" placeholder="Pesquisar em todas as colunas…" aria-label="Pesquisar ordens"></div>
+      </header>
+      <div class="table-wrap">
+        <table class="tbl" id="ordersTable">
+          <thead><tr>
+            <th data-key="ordem">Ordem</th>
+            <th data-key="idEquip">ID</th>
+            <th data-key="equipNome">Equipamento</th>
+            <th data-key="setor">Setor</th>
+            <th data-key="falhaTs">Falha</th>
+            <th data-key="tipo">Tipo de falha</th>
+            <th data-key="inicioTs">Início reparo</th>
+            <th data-key="fimTs">Término reparo</th>
+            <th data-key="durH" class="num">Duração (h)</th>
+            <th data-key="qtd" class="num">Colab.</th>
+            <th data-key="hh" class="num">HH</th>
+            <th data-key="status">Situação</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <footer class="pager">
+        <span id="pageInfo"></span>
+        <div>
+          <button class="btn btn-sm" id="prevPage" type="button" aria-label="Página anterior"><i data-icon="left"></i></button>
+          <button class="btn btn-sm" id="nextPage" type="button" aria-label="Próxima página"><i data-icon="right"></i></button>
+        </div>
+      </footer>
+    </section>
+
+    <!-- Metodologia -->
+    <section class="card method" id="methodSection">
+      <details>
+        <summary><i data-icon="info"></i>Metodologia, fórmulas e limitações dos indicadores</summary>
+        <ul>
+          <li><strong>Referência temporal:</strong> filtros de ano/mês usam a <em>data da falha</em>. Durações usam data+hora de início e de término do reparo (a virada de dia é considerada).</li>
+          <li><strong>Reparo concluído:</strong> início e término válidos, com término ≥ início. Ordens sem início → “Dados incompletos”; sem término → “Pendente”; término anterior ao início → “Inconsistente”. Nenhuma ordem é descartada; só não entram nos cálculos que dependem do dado ausente.</li>
+          <li><strong>HH</strong> = duração do reparo (h) × quantidade de colaboradores. Ordens sem duração válida ou sem quantidade não entram na soma (e são contadas no cartão).</li>
+          <li><strong>MTTR</strong> = soma das durações válidas ÷ nº de reparos concluídos válidos (horas).</li>
+          <li><strong>MTBF</strong> = média dos intervalos (h) entre <em>falhas consecutivas do mesmo equipamento</em> (instante da falha anterior → instante da falha seguinte). Cada intervalo é atribuído ao mês/ano da falha que o encerra e é calculado sobre o histórico completo da base (respeitando os filtros de setor, tipo e equipamento; ano/mês apenas selecionam quais intervalos entram). Equipamento com uma única falha não gera intervalo; meses sem intervalos ficam como N/D (nunca zero). Como o intervalo é medido de falha a falha, ele inclui o tempo de reparo.</li>
+          <li><strong>Disponibilidade estimada</strong> = MTBF ÷ (MTBF + MTTR) × 100. É uma estimativa baseada em tempos médios, <em>não</em> a disponibilidade operacional real (que exigiria horas programadas de operação). Só é calculada quando MTBF e MTTR existem; caso contrário, N/D — meses sem falhas não viram 100%.</li>
+          <li><strong>Equipamentos:</strong> “cadastrados” vem da aba <code>Equipamentos</code> (respeita os filtros de setor/equipamento); “com falhas” conta os equipamentos distintos nas ordens filtradas.</li>
+          <li><strong>Ordens completas:</strong> tipo de falha, equipamento cadastrado, hora da falha, início, término coerente e quantidade de colaboradores todos válidos.</li>
+        </ul>
+      </details>
+    </section>
+
+  </div>
+</main>
+
+<!-- Bibliotecas externas (CDN) com cópia local opcional em lib/ -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>window.XLSX||document.write('<script src="lib/xlsx.full.min.js"><\/script>')</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+<script>window.Chart||document.write('<script src="lib/chart.umd.js"><\/script>')</script>
+<script src="script.js"></script>
+</body>
+</html>
